@@ -89,6 +89,23 @@ PrivateSubnet1b = t.add_resource(Subnet(
      )
 ))
 
+# Create an Internet Gateway
+InternetGateway = t.add_resource(InternetGateway(
+    "InternetGateway",
+    Tags=Tags(
+        Name="Internet-Gateway-Trop",
+        Environment="QA"
+    )
+))
+
+# Attach the Gateway to the VPC
+VPCGatewayAttachment = t.add_resource(VPCGatewayAttachment(
+    "InternetGatewayAttachment",
+    VpcId=Ref(vpc),
+    InternetGatewayId=Ref(InternetGateway)
+))
+
+
 
 print(t.to_yaml())
 
