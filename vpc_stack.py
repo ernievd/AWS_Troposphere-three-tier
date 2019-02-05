@@ -105,6 +105,23 @@ VPCGatewayAttachment = t.add_resource(VPCGatewayAttachment(
     InternetGatewayId=Ref(InternetGateway)
 ))
 
+# Main Route table creation
+MainRouteTable = t.add_resource(RouteTable(
+    "MainRouteTable",
+    VpcId=Ref(vpc),
+    Tags=Tags(
+        Name="QA-RoutingTable--TROP"
+    )
+))
+
+# Create a public route for the main route table linked to the internet gateway so the main table can reach the internet
+PublicRoute = t.add_resource(Route(
+    "PublicRoute",
+    RouteTableId=Ref(MainRouteTable),
+    DestinationCidrBlock="0.0.0.0/0",
+    GatewayId=Ref(InternetGateway)
+))
+
 
 
 print(t.to_yaml())
