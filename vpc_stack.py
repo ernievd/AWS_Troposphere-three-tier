@@ -7,7 +7,7 @@
 from troposphere import Ref, Template, Tags, Join, GetAtt
 from troposphere.ec2 import VPC, Subnet, NetworkAcl, NetworkAclEntry, InternetGateway, \
     VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation, \
-    EIP, NatGateway, SecurityGroup, SecurityGroupRule
+    EIP, NatGateway, SecurityGroup, SecurityGroupRule, SecurityGroupIngress, SecurityGroupEgress
 from troposphere.iam import Role, InstanceProfile, Policy
 
 from awacs.aws import Action
@@ -323,6 +323,7 @@ QAEC2RoleTrop = t.add_resource(Role(
     Path='/',
 ))
 
+
 myEC2RoleInstanceProfile = t.add_resource(InstanceProfile(
     "myEC2RoleInstanceProfile",
     Roles=[Ref(QAEC2RoleTrop)]
@@ -331,7 +332,7 @@ myEC2RoleInstanceProfile = t.add_resource(InstanceProfile(
 # Create a security group
 instanceSecurityGroup = t.add_resource(
     SecurityGroup(
-        'InstanceSecurityGroup',
+        "instanceSecurityGroup",
         GroupDescription='Enable SSH access via port 22',
         SecurityGroupIngress=[
             # SecurityGroupRule(
@@ -346,6 +347,55 @@ instanceSecurityGroup = t.add_resource(
                 CidrIp='74.94.81.157/32')],
         VpcId=Ref(vpc),
     ))
+
+
+# Create a Load Balancer security group
+LoadBalancerSG = t.add_resource(
+    SecurityGroup(
+        "LoadBalancerSG",
+        GroupDescription='Load balancer security group',
+        SecurityGroupIngress=[
+            SecurityGroupRule(
+                IpProtocol='tcp',
+                FromPort='80',
+                ToPort='80',
+                CidrIp='0.0.0.0/0'),
+            SecurityGroupRule(
+                IpProtocol='tcp',
+                FromPort='443',
+                ToPort='443',
+                CidrIp='0.0.0.0/0')],
+        VpcId=Ref(vpc),
+    ))
+
+SGBaseIngress = t.add_resource(SecurityGroupIngress(
+    "SGBaseIngress",
+    DependsOn=[
+        instanceSecurityGroup.title,
+        LoadBalancerSG.title
+        ],
+    GroupId=Ref("instanceSecurityGroup"),
+    IpProtocol='tcp',
+    FromPort='80',
+    ToPort='80',
+    SourceSecurityGroupId=Ref("LoadBalancerSG")
+))
+
+SGBaseEgress = t.add_resource(SecurityGroupEgress(
+    "SGBaseEgress",
+    Description="Secures traffic to be allowed out of the LoadBalancerSG to the InstanceSecurityGroup",
+    DependsOn=[
+        instanceSecurityGroup.title,
+        LoadBalancerSG.title
+        ],
+    GroupId=Ref("LoadBalancerSG"),
+    IpProtocol='tcp',
+    FromPort='80',
+    ToPort='80',
+    DestinationSecurityGroupId=Ref("instanceSecurityGroup")
+))
+
+
 
 print(t.to_yaml())
 
