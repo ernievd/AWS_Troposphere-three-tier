@@ -8,6 +8,14 @@ from troposphere import Ref, Template, Tags, Join, GetAtt
 from troposphere.ec2 import VPC, Subnet, NetworkAcl, NetworkAclEntry, InternetGateway, \
     VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation, \
     EIP, NatGateway
+from troposphere.iam import Role, InstanceProfile, Policy
+
+from awacs.aws import Action
+from awacs.aws import Allow
+#from awacs.aws import Policy
+from awacs.aws import PolicyDocument
+from awacs.aws import Principal
+from awacs.aws import Statement
 
 VPC_NETWORK = "192.168.0.0/19"
 VPC_DMZ_A = "192.168.0.0/23"
@@ -181,6 +189,16 @@ PublicSubnet1bRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation
     SubnetId=Ref(PublicSubnet1b)
 ))
 
+# # ###Create Elastic IP USING OTHER NOTATION ####
+# import troposphere.ec2 as ec2
+# template = Template()
+# EEIP01 = ec2.EIP("EElasticIP")
+# # EIP01.InstanceId = Ref(i01)
+# EEIP01.Domain = "vpc"
+# #template.add_resource(EEIP01)
+# t.add_resource(EEIP01)
+# # ###Create Elastic IP####
+
 # Create Elastic IPs needed for NAT Gateways
 QANatGateway1EIP = t.add_resource(EIP(
     "QANatGateway1EIP",
@@ -211,5 +229,109 @@ NATGatewayAZ2 = t.add_resource(NatGateway(
     )
 ))
 
+# Private Route table creation for availability zone 1
+PrivateRouteTableAZ1 = t.add_resource(RouteTable(
+    "PrivateRouteTableAZ1",
+    VpcId=Ref(vpc),
+    Tags=Tags(
+        Name="QA-PrivateRouteTableAZ1--TROP"
+    )
+))
+
+# Create a private route for the private route table linked to the NAT so the public table can reach the internet
+PrivateNATRoute1 = t.add_resource(Route(
+    "PrivateNATRoute1",
+    RouteTableId=Ref(PrivateRouteTableAZ1),
+    DestinationCidrBlock="0.0.0.0/0",
+    NatGatewayId=Ref(NATGatewayAZ1)
+))
+
+PrivateSubnet1aRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation(
+    "PrivateSubnet1aRouteTableAssociation",
+    RouteTableId=Ref(PrivateRouteTableAZ1),
+    SubnetId=Ref(PrivateSubnet1a)
+))
+
+# Private Route table creation for availability zone 2
+PrivateRouteTableAZ2 = t.add_resource(RouteTable(
+    "PrivateRouteTableAZ2",
+    VpcId=Ref(vpc),
+    Tags=Tags(
+        Name="QA-PrivateRouteTableAZ2--TROP"
+    )
+))
+
+# Create a private route for the private route table linked to the NAT so the public table can reach the internet
+PrivateNATRoute2 = t.add_resource(Route(
+    "PrivateNATRoute2",
+    RouteTableId=Ref(PrivateRouteTableAZ2),
+    DestinationCidrBlock="0.0.0.0/0",
+    NatGatewayId=Ref(NATGatewayAZ2)
+))
+
+PrivateSubnet1bRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation(
+    "PrivateSubnet1bRouteTableAssociation",
+    RouteTableId=Ref(PrivateRouteTableAZ2),
+    SubnetId=Ref(PrivateSubnet1b)
+))
+
+# Add IAM Role
+#       Good reference -   https://www.programcreek.com/python/example/96280/troposphere.iam.Role
+QAEC2RoleTrop = t.add_resource(Role(
+    'QAEC2RoleTrop',
+    RoleName="QAEC2RoleTrop",
+
+    Policies=[Policy(
+        PolicyName="QAs3BuildAccessPolicyCF",
+        PolicyDocument={"Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Action": [
+                                    "s3:*"
+                                ],
+                                "Effect": "Allow",
+                                "Resource": [
+                                    "arn:aws:s3:::qa-storage--dashboard/*",
+                                    "arn:aws:s3:::qa-storage--dashboard"
+                                ]
+                            },
+                            {
+                                "Sid": "Stmt1456922473000",
+                                "Effect": "Allow",
+                                "Action": [
+                                    "logs:CreateLogGroup",
+                                    "logs:CreateLogStream",
+                                    "logs:PutLogEvents",
+                                    "logs:DescribeLogStreams"
+                                ],
+                                "Resource": ["arn:aws:logs:*:*:*"]
+                            }
+                        ]
+                        },
+            )
+        ],
+
+
+    AssumeRolePolicyDocument=PolicyDocument(
+        Statement=[
+            Statement(
+                Effect=Allow,
+                Action=[
+                    Action("sts", "AssumeRole")
+                ],
+                Principal=Principal("Service", "ec2.amazonaws.com")
+            )
+        ]
+    ),
+    Path='/',
+))
+
+
+myEC2RoleInstanceProfile = t.add_resource(InstanceProfile(
+    "myEC2RoleInstanceProfile",
+    Roles=[Ref(QAEC2RoleTrop)]
+))
+
 
 print(t.to_yaml())
+
