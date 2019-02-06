@@ -4,21 +4,16 @@
 # LATER FULL FORMED LAUNCH - aws cloudformation create-stack --stack-name Trop-Trial-Stack --template-body file://vpc_stack.yml --region us-east-1 --capabilities CAPABILITY_IAM --parameters file://qa-parameters.json
 
 
-from troposphere import Ref, Template, Tags, Join, GetAtt
-from troposphere.ec2 import VPC, Subnet, NetworkAcl, NetworkAclEntry, InternetGateway, \
-    VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation, \
-    EIP, NatGateway, SecurityGroup, SecurityGroups, SecurityGroupRule, SecurityGroupIngress, SecurityGroupEgress
+from troposphere import Ref, Template, Tags, Join, GetAtt, Base64
+from troposphere.ec2 import VPC, Subnet, InternetGateway, \
+    VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, \
+    EIP, NatGateway, SecurityGroup, SecurityGroupRule, SecurityGroupIngress, SecurityGroupEgress
 from troposphere.iam import Role, InstanceProfile, Policy
-from troposphere.elasticloadbalancingv2 import LoadBalancer, Listener, ListenerRule, Action, TargetGroup
-
+from troposphere.elasticloadbalancingv2 import LoadBalancer, Listener, TargetGroup
+from awacs.aws import Action, Allow, PolicyDocument, Principal, Statement
 import troposphere.elasticloadbalancingv2 as elb
+import troposphere.autoscaling as autoscaling
 
-from awacs.aws import Action
-from awacs.aws import Allow
-#from awacs.aws import Policy
-from awacs.aws import PolicyDocument
-from awacs.aws import Principal
-from awacs.aws import Statement
 
 VPC_NETWORK = "192.168.0.0/19"
 VPC_DMZ_A = "192.168.0.0/23"
@@ -27,7 +22,6 @@ VPC_PUBLIC_A = "192.168.4.0/23"
 VPC_PUBLIC_B = "192.168.6.0/23"
 VPC_PRIVATE_A = "192.168.8.0/23"
 VPC_PRIVATE_B = "192.168.10.0/23"
-
 
 t = Template()
 
@@ -426,7 +420,6 @@ ALBTargetGroup = t.add_resource(TargetGroup(
     VpcId=Ref(vpc)
 ))
 
-
 alb_listener = t.add_resource(Listener(
     "albListener",
     Port="80",
@@ -438,6 +431,56 @@ alb_listener = t.add_resource(Listener(
     )]
 ))
 
+# Launchconfiguration      https://github.com/cloudtools/troposphere/blob/master/examples/CloudFormation_Init_ConfigSet.py
+AppLaunchConfiguration = t.add_resource(autoscaling.LaunchConfiguration(
+    "AppLaunchConfiguration",
+    ImageId="ami-035be7bafff33b6b6",
+    KeyName="udemy-ec2",
+    SecurityGroups=[
+        Ref(instanceSecurityGroup),
+        ],
+    InstanceType="t2.micro",
+    AssociatePublicIpAddress=True,
+    IamInstanceProfile=Ref(myEC2RoleInstanceProfile),
+    UserData=Base64(Join('', [
+        '#!/bin/bash\n',
+        'sudo su\n',
+        'yum update -y\n',
+        'yum install httpd php -y\n',
+        'cd /var/www/html\n',
+        'unzip application_prod.zip\n',
+        'rm -rf application_prod.zip\n',
+        'sudo service httpd start\n'
+    ])),
+))
+
+AppASG = t.add_resource(autoscaling.AutoScalingGroup(
+    "AppASG",
+    VPCZoneIdentifier=[Ref(DMZSubnet1a), Ref(DMZSubnet1b)],
+    LaunchConfigurationName=Ref(AppLaunchConfiguration),
+    DesiredCapacity="2",
+    HealthCheckType="ELB",
+    HealthCheckGracePeriod="300",
+    TerminationPolicies=[
+        "OldestInstance"
+    ],
+    MinSize="2",
+    MaxSize="4",
+    TargetGroupARNs=[
+        Ref(ALBTargetGroup)
+    ]
+    # LoadBalancerNames=[Ref(LoadBalancer)],
+    # AvailabilityZones=[Ref(VPCAvailabilityZone1), Ref(VPCAvailabilityZone2)],
+    # UpdatePolicy=UpdatePolicy(
+    #     AutoScalingReplacingUpdate=AutoScalingReplacingUpdate(
+    #         WillReplace=True,
+    #     ),
+    #     AutoScalingRollingUpdate=AutoScalingRollingUpdate(
+    #         PauseTime='PT5M',
+    #         MinInstancesInService="1",
+    #         MaxBatchSize='1',
+    #         WaitOnResourceSignals=True
+))
 
 
 print(t.to_yaml())
