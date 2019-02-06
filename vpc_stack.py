@@ -110,7 +110,7 @@ MainRouteTable = t.add_resource(RouteTable(
     "MainRouteTable",
     VpcId=Ref(vpc),
     Tags=Tags(
-        Name="QA-RoutingTable--TROP"
+        Name="QA-MainRoutingTable--TROP"
     )
 ))
 
@@ -122,7 +122,67 @@ PublicRoute = t.add_resource(Route(
     GatewayId=Ref(InternetGateway)
 ))
 
+# DMZ Route table creation
+DmzRouteTable = t.add_resource(RouteTable(
+    "DmzRouteTable",
+    VpcId=Ref(vpc),
+    Tags=Tags(
+        Name="QA-DMZRouteTable--TROP"
+    )
+))
+
+# Create a public route for the DMZ route table linked to the internet gateway so the DMZ table can reach the internet
+DmzPublicRoute = t.add_resource(Route(
+    "DmzPublicRoute",
+    RouteTableId=Ref(DmzRouteTable),
+    DestinationCidrBlock="0.0.0.0/0",
+    GatewayId=Ref(InternetGateway)
+))
+
+# Associate the DMZ Subnets to the DMZ route table  AWS::EC2::SubnetRouteTableAssociation
+DMZSubnet1aRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation(
+    "DMZSubnet1aRouteTableAssociation",
+    RouteTableId=Ref(DmzRouteTable),
+    SubnetId=Ref(DMZSubnet1a)
+))
+DMZSubnet1bRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation(
+    "DMZSubnet1bRouteTableAssociation",
+    RouteTableId=Ref(DmzRouteTable),
+    SubnetId=Ref(DMZSubnet1b)
+))
+
+# Public Route table creation
+PublicRouteTable = t.add_resource(RouteTable(
+    "PublicRouteTable",
+    VpcId=Ref(vpc),
+    Tags=Tags(
+        Name="QA-PublicRouteTable--TROP"
+    )
+))
+
+PublicPublicRoute = t.add_resource(Route(
+    "PublicPublicRoute",
+    RouteTableId=Ref(PublicRouteTable),
+    DestinationCidrBlock="0.0.0.0/0",
+    GatewayId=Ref(InternetGateway)
+))
+
+# Associate the Public Subnets to the public route table - AWS::EC2::SubnetRouteTableAssociation
+PublicSubnet1aRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation(
+    "PublicSubnet1aRouteTableAssociation",
+    RouteTableId=Ref(PublicRouteTable),
+    SubnetId=Ref(PublicSubnet1a)
+))
+PublicSubnet1bRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation(
+    "PublicSubnet1bRouteTableAssociation",
+    RouteTableId=Ref(PublicRouteTable),
+    SubnetId=Ref(PublicSubnet1b)
+))
+
+
 
 
 print(t.to_yaml())
+
+
 
