@@ -1,13 +1,13 @@
 # To generate just run  - python vpc_stack.py > vpc_stack.yml
 # To launch the stack - aws cloudformation create-stack --stack-name Trop-Trial-Stack --template-body file://vpc_stack.yml --region us-east-1
-
+## aws cloudformation update-stack --stack-name Trop-Trial-Stack --template-body file://vpc_stack.yml --region us-east-1 --capabilities CAPABILITY_NAMED_IAM
 # LATER FULL FORMED LAUNCH - aws cloudformation create-stack --stack-name Trop-Trial-Stack --template-body file://vpc_stack.yml --region us-east-1 --capabilities CAPABILITY_IAM --parameters file://qa-parameters.json
 
 
 from troposphere import Ref, Template, Tags, Join, GetAtt
 from troposphere.ec2 import VPC, Subnet, NetworkAcl, NetworkAclEntry, InternetGateway, \
     VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation, \
-    EIP, NatGateway
+    EIP, NatGateway, SecurityGroup, SecurityGroupRule
 from troposphere.iam import Role, InstanceProfile, Policy
 
 from awacs.aws import Action
@@ -280,7 +280,6 @@ PrivateSubnet1bRouteTableAssociation = t.add_resource(SubnetRouteTableAssociatio
 QAEC2RoleTrop = t.add_resource(Role(
     'QAEC2RoleTrop',
     RoleName="QAEC2RoleTrop",
-
     Policies=[Policy(
         PolicyName="QAs3BuildAccessPolicyCF",
         PolicyDocument={"Version": "2012-10-17",
@@ -310,8 +309,6 @@ QAEC2RoleTrop = t.add_resource(Role(
                         },
             )
         ],
-
-
     AssumeRolePolicyDocument=PolicyDocument(
         Statement=[
             Statement(
@@ -326,12 +323,29 @@ QAEC2RoleTrop = t.add_resource(Role(
     Path='/',
 ))
 
-
 myEC2RoleInstanceProfile = t.add_resource(InstanceProfile(
     "myEC2RoleInstanceProfile",
     Roles=[Ref(QAEC2RoleTrop)]
 ))
 
+# Create a security group
+instanceSecurityGroup = t.add_resource(
+    SecurityGroup(
+        'InstanceSecurityGroup',
+        GroupDescription='Enable SSH access via port 22',
+        SecurityGroupIngress=[
+            # SecurityGroupRule(
+            #     IpProtocol='tcp',
+            #     FromPort='22',
+            #     ToPort='22',
+            #     CidrIp=Ref(sshlocation_param)),
+            SecurityGroupRule(
+                IpProtocol='tcp',
+                FromPort='22',
+                ToPort='22',
+                CidrIp='74.94.81.157/32')],
+        VpcId=Ref(vpc),
+    ))
 
 print(t.to_yaml())
 
