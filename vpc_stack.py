@@ -3,9 +3,11 @@
 
 # LATER FULL FORMED LAUNCH - aws cloudformation create-stack --stack-name Trop-Trial-Stack --template-body file://vpc_stack.yml --region us-east-1 --capabilities CAPABILITY_IAM --parameters file://qa-parameters.json
 
-from troposphere import Ref, Template, Tags, Join
+
+from troposphere import Ref, Template, Tags, Join, GetAtt
 from troposphere.ec2 import VPC, Subnet, NetworkAcl, NetworkAclEntry, InternetGateway, \
-    VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation
+    VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation, \
+    EIP, NatGateway
 
 VPC_NETWORK = "192.168.0.0/19"
 VPC_DMZ_A = "192.168.0.0/23"
@@ -179,10 +181,35 @@ PublicSubnet1bRouteTableAssociation = t.add_resource(SubnetRouteTableAssociation
     SubnetId=Ref(PublicSubnet1b)
 ))
 
+# Create Elastic IPs needed for NAT Gateways
+QANatGateway1EIP = t.add_resource(EIP(
+    "QANatGateway1EIP",
+    DependsOn=VPCGatewayAttachment.title,
+    Domain="vpc"
+))
+QANatGateway2EIP = t.add_resource(EIP(
+    "QANatGateway2EIP",
+    DependsOn=VPCGatewayAttachment.title,
+    Domain="vpc"
+))
 
+# Create NAT Gateways - associate them to a public subnet so they can reach the internet when needed
+NATGatewayAZ1 = t.add_resource(NatGateway(
+    "NATGatewayAZ1",
+    AllocationId=GetAtt("QANatGateway1EIP", "AllocationId"),
+    SubnetId=Ref(PublicSubnet1a),
+    Tags=Tags(
+        Name="QA-NAT_Gateway-AZ1--TROP"
+    )
+))
+NATGatewayAZ2 = t.add_resource(NatGateway(
+    "NATGatewayAZ2",
+    AllocationId=GetAtt("QANatGateway2EIP", "AllocationId"),
+    SubnetId=Ref(PublicSubnet1b),
+    Tags=Tags(
+        Name="QA-NAT_Gateway-AZ2--TROP"
+    )
+))
 
 
 print(t.to_yaml())
-
-
-
