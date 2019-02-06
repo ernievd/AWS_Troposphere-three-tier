@@ -7,8 +7,11 @@
 from troposphere import Ref, Template, Tags, Join, GetAtt
 from troposphere.ec2 import VPC, Subnet, NetworkAcl, NetworkAclEntry, InternetGateway, \
     VPCGatewayAttachment, RouteTable, Route, SubnetRouteTableAssociation, SubnetNetworkAclAssociation, \
-    EIP, NatGateway, SecurityGroup, SecurityGroupRule, SecurityGroupIngress, SecurityGroupEgress
+    EIP, NatGateway, SecurityGroup, SecurityGroups, SecurityGroupRule, SecurityGroupIngress, SecurityGroupEgress
 from troposphere.iam import Role, InstanceProfile, Policy
+from troposphere.elasticloadbalancingv2 import LoadBalancer, Listener, ListenerRule, Action, TargetGroup
+
+import troposphere.elasticloadbalancingv2 as elb
 
 from awacs.aws import Action
 from awacs.aws import Allow
@@ -393,6 +396,46 @@ SGBaseEgress = t.add_resource(SecurityGroupEgress(
     FromPort='80',
     ToPort='80',
     DestinationSecurityGroupId=Ref("instanceSecurityGroup")
+))
+
+
+LoadBalancer = t.add_resource(LoadBalancer(
+    "LoadBalancer",
+    Name="QAAppLoadBalancerTrop",
+    Scheme="internet-facing",
+    Subnets=[
+        Ref("DMZSubnet1a"),
+        Ref("DMZSubnet1b"),
+    ],
+    SecurityGroups=[
+        Ref("LoadBalancerSG")
+    ],
+))
+
+# Load balancer target group
+ALBTargetGroup = t.add_resource(TargetGroup(
+    "ALBTargetGroup",
+    HealthCheckIntervalSeconds="30",
+    HealthCheckProtocol="HTTP",
+    HealthCheckTimeoutSeconds="5",
+    HealthyThresholdCount="3",
+    Name="ALBTargetGroup",
+    Port=80,
+    Protocol="HTTP",
+    UnhealthyThresholdCount="3",
+    VpcId=Ref(vpc)
+))
+
+
+alb_listener = t.add_resource(Listener(
+    "albListener",
+    Port="80",
+    Protocol="HTTP",
+    LoadBalancerArn=Ref(LoadBalancer),
+    DefaultActions=[elb.Action(
+        Type="forward",
+        TargetGroupArn=Ref(ALBTargetGroup)
+    )]
 ))
 
 
